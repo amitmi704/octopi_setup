@@ -1,0 +1,103 @@
+---
+- hosts: localhost
+  become: true
+  gather_facts: no
+  vars:
+    apt_autoupgrade: false
+    venv_command: /usr/bin/python3 -m venv
+    venv_dir: /opt/OctoPrint
+    new_username: octoprint
+    new_user_password: OctoPrint_2020_ATX
+  tasks:
+    - name: Update Apt auto-upgrade configuration
+      template:
+        src: Jinja2/apt-auto-upgrade.j2
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        lstrip_blocks: yes
+        trim_blocks: yes
+        group: root
+        owner: root
+        mode: 0644
+      register: apt_autoupgrade_conf
+      when: ansible_version == 'Ubuntu'
+    - name: Abort Playbook if Autoupgrade just disabled
+      block:
+        - name: Autoupgrade just disabled check
+          debug:
+            msg: Just disabled Apt auto-upgrade function.  Unsure of how long it takes to quit locking the Apt system (take a break, come back in 5 and try it again)
+        - meta: end_play
+      when: apt_autoupgrade_conf.changed and not apt_autoupgrade
+    - name: General Operating System (OS) updates
+      block:
+        - name: Update Apt cache
+          apt:
+            update_cache: yes
+        - name: Insure Aptitude is installed
+          apt:
+            name: aptitude
+            state: latest
+        - name: Update packages on the system
+          apt:
+            name: "*"
+            state: latest
+        - name: Upgrade the OS
+          apt:
+            upgrade: dist
+      when: not apt_autoupgrade
+    - name: Setup OctoPrint
+      block:
+        - name: Setup OctoPrint user
+          user:
+            name: "{{ new_username }}"
+            password: "{{ new_user_password | password_hash('sha512', '3DSaltandPepper') }}"
+        - name: Install OctoPrint OS packages
+          apt:
+            pkg:
+              - python3
+              - python3-pip
+              - python3-dev
+              - python3-setuptools
+              - python3-venv
+              - git
+              - libyaml-dev
+              - build-essential
+        - name: Install OctoPrint Python modules
+          pip:
+            name:
+              - octoprint
+            state: latest
+            virtualenv: "{{ venv_dir }}"
+            virtualenv_command: "{{ venv_command }}"
+        - name: Setting file system permissions
+          file:
+            path: "{{ venv_dir }}"
+            owner: "{{ new_username }}"
+            group: "{{ new_username }}"
+            state: directory
+            recurse: yes
+        - name: Setting up OctoPrint service
+          template:
+            src: Jinja2/octoprint.service.j2
+            dest: /etc/systemd/system/octoprint.service
+            group: root
+            owner: root
+            mode: 0755
+        - name: Enable OctoPrint service
+          systemd:
+            daemon_reload: yes
+            name: octoprint.service
+            enabled: yes
+            state: started
+    - name: Enabling RPi camera
+      copy:
+        src: rpi-config.txt
+        dest: /boot/config.txt
+        group: root
+        owner: root
+        mode: 0755
+      register: rpi_config
+    - name: Next steps...
+      debug:
+        msg: Reboot the system to finish enabling the camera
+      when: rpi_config.changed
+...
