@@ -12,14 +12,14 @@ An Ansible setup package to get OctoPrint running on your Raspberry Pi with ease
    1. `mkdir ~/tmp_mount`
    1. `mkdir ~/octopi_setup`
 1. Mount the drive as a super user: `sudo mount <DEVICE_PATH> ~/tmp_mount`
-1. Copy the files to your home directory as a super user: `sudo cp -R ~/tmp_mount ~/octopi_setup`
+1. Copy the files to your home directory as a super user: `sudo cp -R ~/tmp_mount/. ~/octopi_setup/`
 1. Unmount the thumb drive and clean up the temporary folder:
    1. `sudo umount ~/tmp_mount`
-   1. `rm ~/tmp_mount`
+   1. `rmdir ~/tmp_mount`
 1. Update file permissions on the copied files: `sudo chown -R ${LOGNAME}:${LOGNAME} ~/octopi_setup`
 
 ###### WiFi Setup
-1. Execute the WiFi joining script: `sudo ~/octopi_setup/setup-wifi-ros.py`
+1. Execute the WiFi joining script: `sudo python3 ~/octopi_setup/setup-wifi-ros.py`
 2. Follow the prompts to connect.
 
 ###### Ansible Install
