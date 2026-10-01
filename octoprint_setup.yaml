@@ -1,7 +1,8 @@
 ---
-- hosts: localhost
+- name: Set up OctoPrint
+  hosts: localhost
   become: true
-  gather_facts: no
+  gather_facts: false
   vars:
     apt_autoupgrade: false
     venv_command: /usr/bin/python3 -m venv
@@ -10,48 +11,51 @@
     new_user_password: OctoPrint_2020_ATX
   tasks:
     - name: Update Apt auto-upgrade configuration
-      template:
+      ansible.builtin.template:
         src: Jinja2/apt-auto-upgrade.j2
         dest: /etc/apt/apt.conf.d/20auto-upgrades
-        lstrip_blocks: yes
-        trim_blocks: yes
+        lstrip_blocks: true
+        trim_blocks: true
         group: root
         owner: root
-        mode: 0644
+        mode: "0644"
       register: apt_autoupgrade_conf
       when: ansible_version == 'Ubuntu'
     - name: Abort Playbook if Autoupgrade just disabled
+      when: apt_autoupgrade_conf.changed and not apt_autoupgrade
       block:
         - name: Autoupgrade just disabled check
-          debug:
-            msg: Just disabled Apt auto-upgrade function.  Unsure of how long it takes to quit locking the Apt system (take a break, come back in 5 and try it again)
-        - meta: end_play
-      when: apt_autoupgrade_conf.changed and not apt_autoupgrade
+          ansible.builtin.debug:
+            msg: >-
+              Just disabled Apt auto-upgrade function.  Unsure of how long it takes to quit
+              locking the Apt system (take a break, come back in 5 and try it again)
+        - name: End the play
+          ansible.builtin.meta: end_play
     - name: General Operating System (OS) updates
+      when: not apt_autoupgrade
       block:
         - name: Update Apt cache
-          apt:
-            update_cache: yes
+          ansible.builtin.apt:
+            update_cache: true
         - name: Insure Aptitude is installed
-          apt:
+          ansible.builtin.apt:
             name: aptitude
-            state: latest
+            state: present
         - name: Update packages on the system
-          apt:
+          ansible.builtin.apt:
             name: "*"
-            state: latest
+            state: latest  # noqa: package-latest - upgrading every package is this step's purpose
         - name: Upgrade the OS
-          apt:
+          ansible.builtin.apt:
             upgrade: dist
-      when: not apt_autoupgrade
     - name: Setup OctoPrint
       block:
         - name: Setup OctoPrint user
-          user:
+          ansible.builtin.user:
             name: "{{ new_username }}"
             password: "{{ new_user_password | password_hash('sha512', '3DSaltandPepper') }}"
         - name: Install OctoPrint OS packages
-          apt:
+          ansible.builtin.apt:
             pkg:
               - python3
               - python3-pip
@@ -62,42 +66,42 @@
               - libyaml-dev
               - build-essential
         - name: Install OctoPrint Python modules
-          pip:
+          ansible.builtin.pip:
             name:
               - octoprint
-            state: latest
+            state: latest  # noqa: package-latest - a rerun brings OctoPrint up to date
             virtualenv: "{{ venv_dir }}"
             virtualenv_command: "{{ venv_command }}"
         - name: Setting file system permissions
-          file:
+          ansible.builtin.file:
             path: "{{ venv_dir }}"
             owner: "{{ new_username }}"
             group: "{{ new_username }}"
             state: directory
-            recurse: yes
+            recurse: true
         - name: Setting up OctoPrint service
-          template:
+          ansible.builtin.template:
             src: Jinja2/octoprint.service.j2
             dest: /etc/systemd/system/octoprint.service
             group: root
             owner: root
-            mode: 0755
+            mode: "0755"
         - name: Enable OctoPrint service
-          systemd:
-            daemon_reload: yes
+          ansible.builtin.systemd:
+            daemon_reload: true
             name: octoprint.service
-            enabled: yes
+            enabled: true
             state: started
     - name: Enabling RPi camera
-      copy:
+      ansible.builtin.copy:
         src: rpi-config.txt
         dest: /boot/config.txt
         group: root
         owner: root
-        mode: 0755
-      register: rpi_config
-    - name: Next steps...
-      debug:
+        mode: "0755"
+      notify: Next steps
+  handlers:
+    - name: Next steps
+      ansible.builtin.debug:
         msg: Reboot the system to finish enabling the camera
-      when: rpi_config.changed
 ...
